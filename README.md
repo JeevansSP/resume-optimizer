@@ -196,6 +196,50 @@ infra/                     # Docker, Cloud Run deploy script, entrypoint
 ### Admin
 Full CRUD for tenants, users, domain rules, credit packs, time passes, promo codes, and transactions under `/admin/*`. Requires `is_super_admin` flag.
 
+## Admin & Roles
+
+### Setting up a super admin
+
+The first user to sign up won't have admin access. Set it directly in the database:
+
+```sql
+UPDATE users SET is_super_admin = true WHERE email = 'your-email@example.com';
+```
+
+Once set, the **Admin** tab appears in the sidebar. Super admins can:
+- View dashboard KPIs (users, jobs, revenue, LLM usage)
+- Manage users (search, assign tenants, grant credits)
+- Create/edit credit packs and time passes
+- Create/manage promo codes
+- View all transactions
+- Manage tenants and domain rules
+
+### Multi-Tenancy & Domain Rules
+
+Tenants are organizations (companies, universities) used for labeling — **not data isolation**. All data remains scoped by user.
+
+**How it works:**
+1. Create a tenant in the Admin panel (e.g. "MIT", "Google")
+2. Add a domain rule mapping an email domain to that tenant (e.g. `mit.edu` → "MIT")
+3. When a user signs up via Google OAuth with `@mit.edu`, they're auto-assigned to the "MIT" tenant
+
+**Manual assignment:** Admins can also manually assign any user to a tenant from the Users tab.
+
+**What tenants give you:**
+- Organizational labeling in the admin panel
+- Tenant name shown on user profiles
+- Ability to filter/search users by organization
+- Domain-based auto-assignment on signup
+
+```sql
+-- Example: Create a tenant and domain rule
+INSERT INTO tenants (id, name) VALUES (gen_random_uuid(), 'MIT');
+INSERT INTO tenant_domain_rules (tenant_id, domain)
+  VALUES ('<tenant-id-from-above>', 'mit.edu');
+```
+
+Or do it via the Admin UI → Settings tab → Tenants & Domain Rules.
+
 ## Credit System
 
 | Priority | Source | Details |
@@ -206,6 +250,49 @@ Full CRUD for tenants, users, domain rules, credit packs, time passes, promo cod
 | 4 | No credits | 429 error, frontend shows paywall |
 
 Credits are deducted synchronously before generation starts. If generation fails, a refund is issued automatically.
+
+### Promo Codes
+
+Admins can create promo codes from the Admin panel:
+- **CREDITS type** — adds N credits to the user's balance
+- **TIME_PASS type** — activates a time pass tier (unlimited generations for N days)
+- One redemption per user per code
+- Optional max total redemptions and expiry date
+- Time passes stack: if a user buys a second pass while one is active, the new pass starts at the old expiry
+
+## AI Chat Agents
+
+Both the profile and job pages have AI chat panels powered by [Google ADK](https://google.github.io/adk-docs/) (Agent Development Kit).
+
+### Profile Chat (`profile_editor` agent)
+- Reads and edits the user's master profile data (`ResumeInfo`)
+- Tools: `get_profile`, `edit_profile` (JSON Patch operations)
+- Knows the full product flow — correctly directs users to the Jobs section for PDF downloads
+- Will not fabricate UI elements that don't exist
+
+### Job Chat (`resume_editor` agent)
+- Reads and edits the tailored resume (`CustomResumeInfo`)
+- Tools: `get_resume`, `edit_resume` (JSON Patch operations)
+- After edits, auto-recompiles the PDF in the background
+- Knows about the fixed LaTeX template — will explain section ordering when asked
+- Refuses to generate fake metrics or fabricate experience
+
+### Chat persistence
+Chat history is stored via ADK's `DatabaseSessionService` in PostgreSQL (`sessions` and `events` tables). Sessions are keyed by `profile_chat_{id}` or `job_chat_{id}`.
+
+## Resume Roast
+
+Free feature — no credits required. Users upload a PDF and get:
+1. **Comedic roast** — AI-generated roast points about the resume
+2. **ATS readiness checklist** — 8 criteria (machine readability, contact info, skills, dates, etc.)
+3. **Shareable link** — public URL with OG meta tags for social sharing
+
+Roasts use content-based deduplication (SHA-256 hash). Re-uploading the same PDF returns the cached result.
+
+### Share link analytics
+Every view of a shared roast link is tracked (`roast_views` table) with:
+- IP address, user agent, referer
+- Parsed platform (WhatsApp, etc.), OS, browser
 
 ## Deployment
 
@@ -234,6 +321,68 @@ For production, you'll need:
 - GCS bucket for PDF storage
 - Google OAuth credentials with correct redirect URI
 - Razorpay keys (optional — for payments)
+
+## Environment Variables Reference
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | Yes | — | PostgreSQL async connection string (`postgresql+asyncpg://...`) |
+| `GEMINI_API_KEY` | Yes | — | Google AI API key from [AI Studio](https://aistudio.google.com/apikey) |
+| `GEMINI_FLASH_MODEL` | No | `gemini-3-flash-preview` | Model for profile structuring, roasts, and chat |
+| `GEMINI_PRO_MODEL` | No | `gemini-3.1-pro-preview` | Model for resume tailoring (higher quality) |
+| `GOOGLE_CLIENT_ID` | Prod | — | Google OAuth 2.0 client ID |
+| `GOOGLE_CLIENT_SECRET` | Prod | — | Google OAuth 2.0 client secret |
+| `JWT_SECRET` | Yes | `change-this-secret` | Secret for signing JWTs (min 32 chars in production) |
+| `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |
+| `JWT_EXPIRY_HOURS` | No | `24` | JWT token expiry in hours |
+| `RAZORPAY_KEY_ID` | No | — | Razorpay key ID (skip to disable payments) |
+| `RAZORPAY_KEY_SECRET` | No | — | Razorpay key secret |
+| `RAZORPAY_WEBHOOK_SECRET` | No | — | Razorpay webhook signature secret |
+| `DAILY_FREE_CREDITS` | No | `3` | Free resume generations per user per day |
+| `GCS_BUCKET` | No | — | GCS bucket name for PDF storage (skip for local-only) |
+| `GCS_CREDENTIALS_PATH` | No | — | Path to GCS service account JSON (uses ADC if omitted) |
+| `LATEX_BIN_PATH` | No | `/Library/TeX/texbin` | Directory containing `pdflatex` binary |
+| `ENVIRONMENT` | No | `DEV` | `DEV` or `PROD` — affects error verbosity |
+| `FRONTEND_URL` | No | `http://localhost:8000` | Used for CORS origins and OAuth redirect |
+| `DEV_AUTH_BYPASS` | No | `false` | Set `true` to skip OAuth in development (auto-creates a test user) |
+| `RUN_MIGRATIONS` | No | `false` | Set `true` to run Alembic migrations on container startup |
+
+## Pre-flight Check
+
+Verify all external services before deploying:
+
+```bash
+uv run python infra/preflight.py
+```
+
+Checks PostgreSQL connectivity + schema, Gemini Flash & Pro models, LaTeX compiler, and GCS bucket. Exits with code 0 if all pass, 1 if any fail.
+
+## Troubleshooting
+
+### "LaTeX compilation timed out"
+- pdflatex has a 90-second timeout per pass. Image-heavy PDFs or CPU-constrained containers can hit this.
+- Fix: increase CPU allocation (2 vCPU recommended) or increase `PDFLATEX_TIMEOUT` in `app/services/latex/compiler.py`.
+
+### "No /Root object! - Is this really a PDF?"
+- The uploaded file isn't a valid PDF (might be a .docx or image renamed to .pdf).
+- The frontend enforces a 5MB limit and PDF MIME type check.
+
+### "Memory limit exceeded"
+- Large/image-heavy PDFs can cause pdfplumber to consume excessive memory during text extraction.
+- Fix: increase container memory (2Gi recommended) or reduce the upload size limit.
+
+### LaTeX special characters breaking compilation
+- The sanitizer (`app/services/latex/sanitizer.py`) escapes `& % $ # _ { } ~ ^` and common Unicode.
+- URLs are handled specially — only `%` is escaped (to `\%`) to prevent LaTeX comment breakage.
+- If you encounter a new character that breaks compilation, add it to `_UNICODE_MAP` or `handle_special_chars`.
+
+### Chat returns "A chat request is already in progress"
+- Concurrency is managed via in-memory task tracking (`_active_tasks` dict).
+- This can happen if a previous request crashed without cleanup. Refreshing the page clears it.
+
+### OAuth redirect mismatch
+- Ensure `FRONTEND_URL` matches your domain exactly (including `https://`).
+- Add `{FRONTEND_URL}/auth/google/callback` to your Google OAuth authorized redirect URIs.
 
 ## Key Design Decisions
 
