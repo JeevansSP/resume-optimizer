@@ -10,7 +10,10 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
     # ports:
     #   - "8080:8080"
     env_file:
