@@ -9,6 +9,16 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      RUN_MIGRATIONS: "true"
+    depends_on:
+      - postgres
 
 volumes:
   pgdata:
