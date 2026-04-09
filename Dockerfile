@@ -1,5 +1,7 @@
 FROM python:3.12-slim
 
+ENV PORT=8080
+
 # System deps: TeX Live for PDF generation, poppler for pdf2image
 RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-latex-base \
