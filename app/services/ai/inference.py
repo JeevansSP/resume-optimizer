@@ -69,14 +69,18 @@ class InferenceService:
         model_name: str | None = None,
         *,
         provider: "LLMProvider | None" = None,
+        allow_fallback: bool = False,
     ):
         from app.services.ai.providers.base import LLMProvider as _LLM
+
+        self.allow_fallback = allow_fallback
 
         if provider:
             self.provider: _LLM = provider
             self.model = getattr(provider, "model_id", model_name or "unknown")
         else:
             # Legacy path: construct a GeminiProvider from settings
+            self.allow_fallback = True  # platform default always gets fallback
             settings = get_settings()
             model = model_name or settings.GEMINI_FLASH_MODEL
             from app.services.ai.providers.gemini import GeminiProvider
@@ -137,31 +141,32 @@ class InferenceService:
         t0 = time.monotonic()
 
         async def _generate_with_fallback() -> str:
+            can_fallback = (
+                self.allow_fallback
+                and fallback_model
+                and fallback_model != self.model
+            )
             try:
                 return await self.provider.generate(**call_kwargs)
             except asyncio.TimeoutError:
-                if not fallback_model or fallback_model == self.model:
+                if not can_fallback:
                     raise
                 logger.warning(
                     f"Primary model {self.model} timed out, falling back to {fallback_model}"
                 )
-                from app.services.ai.providers.gemini import GeminiProvider
-                if not isinstance(self.provider, GeminiProvider):
-                    raise  # BYOK non-Gemini — no cross-provider fallback
                 settings = get_settings()
+                from app.services.ai.providers.gemini import GeminiProvider
                 fb_provider = GeminiProvider(api_key=settings.GEMINI_API_KEY, model_id=fallback_model)
                 fb_kwargs = {**call_kwargs, "timeout": None}
                 return await fb_provider.generate(**fb_kwargs)
             except Exception:
-                if not fallback_model or fallback_model == self.model:
+                if not can_fallback:
                     raise
-                from app.services.ai.providers.gemini import GeminiProvider
-                if not isinstance(self.provider, GeminiProvider):
-                    raise  # BYOK non-Gemini — no cross-provider fallback
                 logger.warning(
                     f"Primary model {self.model} failed, falling back to {fallback_model}"
                 )
                 settings = get_settings()
+                from app.services.ai.providers.gemini import GeminiProvider
                 fb_provider = GeminiProvider(api_key=settings.GEMINI_API_KEY, model_id=fallback_model)
                 fb_kwargs = {**call_kwargs, "timeout": None}
                 return await fb_provider.generate(**fb_kwargs)

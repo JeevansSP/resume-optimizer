@@ -34,7 +34,7 @@ async def test_gemini_provider_list_models():
         mock_model = MagicMock()
         mock_model.name = "models/gemini-3-flash-preview"
         mock_model.display_name = "Gemini 3 Flash Preview"
-        mock_model.supported_generation_methods = ["generateContent"]
+        mock_model.supported_actions = ["generateContent"]
         mock_client.models.list.return_value = [mock_model]
 
         from app.services.ai.providers.gemini import GeminiProvider

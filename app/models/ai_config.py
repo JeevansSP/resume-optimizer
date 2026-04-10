@@ -22,7 +22,7 @@ class UserAIConfig(TimestampMixin, Base):
     user_id: Mapped[str] = mapped_column(
         String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    provider: Mapped[AIProvider] = mapped_column(Enum(AIProvider), nullable=False)
+    provider: Mapped[AIProvider] = mapped_column(Enum(AIProvider, create_type=False), nullable=False)
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     api_host: Mapped[str | None] = mapped_column(String, nullable=True)
     model_id: Mapped[str] = mapped_column(String, nullable=False)

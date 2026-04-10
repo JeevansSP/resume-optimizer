@@ -23,8 +23,8 @@ class GeminiProvider(LLMProvider):
             raw = await asyncio.to_thread(self.client.models.list)
             models = []
             for m in raw:
-                methods = getattr(m, "supported_generation_methods", [])
-                if "generateContent" not in methods:
+                actions = getattr(m, "supported_actions", None) or getattr(m, "supported_generation_methods", [])
+                if "generateContent" not in actions:
                     continue
                 name = getattr(m, "name", "")
                 model_id = name.replace("models/", "") if name.startswith("models/") else name

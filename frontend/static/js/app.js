@@ -4163,7 +4163,7 @@ const AISettingsPage = {
 
     const load = async () => {
       try {
-        const resp = await api('/settings/ai/');
+        const resp = await api.get('/settings/ai/');
         if (resp) {
           form.value.provider = resp.provider;
           form.value.model_id = resp.model_id;
@@ -4193,7 +4193,7 @@ const AISettingsPage = {
           api_key: form.value.api_key || undefined,
           api_host: form.value.api_host || undefined,
         };
-        const resp = await api('/settings/ai/models', { method: 'POST', body: JSON.stringify(body) });
+        const resp = await api.post('/settings/ai/models', body);
         models.value = resp || [];
         if (models.value.length === 0) {
           error.value = 'No models returned. You can type a model ID manually.';
@@ -4217,7 +4217,7 @@ const AISettingsPage = {
           api_key: form.value.api_key || undefined,
           api_host: form.value.api_host || undefined,
         };
-        await api('/settings/ai/', { method: 'PUT', body: JSON.stringify(body) });
+        await api.put('/settings/ai/', body);
         success.value = 'Settings saved!';
         form.value.api_key = '';
         await load();
@@ -4233,7 +4233,7 @@ const AISettingsPage = {
       error.value = '';
       success.value = '';
       try {
-        await api('/settings/ai/', { method: 'DELETE' });
+        await api.del('/settings/ai/');
         form.value = { provider: 'PLATFORM_GEMINI', api_key: '', api_host: '', model_id: '' };
         models.value = [];
         keyHint.value = '';
