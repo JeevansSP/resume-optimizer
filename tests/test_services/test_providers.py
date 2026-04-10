@@ -119,3 +119,50 @@ async def test_anthropic_provider_list_models_returns_curated():
         assert len(models) >= 3
         ids = [m.id for m in models]
         assert "claude-sonnet-4-6" in ids
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_generate():
+    with patch("app.services.ai.providers.openai_compatible.openai") as mock_openai:
+        mock_client = AsyncMock()
+        mock_openai.AsyncOpenAI.return_value = mock_client
+
+        mock_choice = MagicMock()
+        mock_choice.message.content = '{"name": "Bob"}'
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        from app.services.ai.providers.openai_compatible import OpenAICompatibleProvider
+
+        provider = OpenAICompatibleProvider(
+            api_key="test-key",
+            model_id="mixtral-8x7b",
+            base_url="https://api.groq.com/openai/v1",
+        )
+        result = await provider.generate(
+            system_prompt="Extract info",
+            inputs=["some text"],
+        )
+        assert result == '{"name": "Bob"}'
+        mock_openai.AsyncOpenAI.assert_called_once_with(
+            api_key="test-key", base_url="https://api.groq.com/openai/v1"
+        )
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_list_models_failure_returns_empty():
+    with patch("app.services.ai.providers.openai_compatible.openai") as mock_openai:
+        mock_client = AsyncMock()
+        mock_openai.AsyncOpenAI.return_value = mock_client
+        mock_client.models.list = AsyncMock(side_effect=Exception("Connection refused"))
+
+        from app.services.ai.providers.openai_compatible import OpenAICompatibleProvider
+
+        provider = OpenAICompatibleProvider(
+            api_key="test-key",
+            model_id="local-model",
+            base_url="http://localhost:11434/v1",
+        )
+        models = await provider.list_models()
+        assert models == []
