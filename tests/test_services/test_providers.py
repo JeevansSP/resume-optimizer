@@ -166,3 +166,65 @@ async def test_openai_compatible_list_models_failure_returns_empty():
         )
         models = await provider.list_models()
         assert models == []
+
+
+from app.services.ai.providers.base import LLMProvider
+
+
+def test_get_provider_returns_gemini_for_none():
+    with patch("app.services.ai.providers.get_settings") as mock:
+        mock.return_value.GEMINI_API_KEY = "platform-key"
+        mock.return_value.GEMINI_FLASH_MODEL = "gemini-3-flash-preview"
+        mock.return_value.GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
+
+        from app.services.ai.providers import get_provider
+        from app.services.ai.providers.gemini import GeminiProvider
+
+        provider = get_provider(config=None, purpose="profile_structuring")
+        assert isinstance(provider, GeminiProvider)
+        assert provider.model_id == "gemini-3-flash-preview"
+
+
+def test_get_provider_returns_gemini_pro_for_tailoring():
+    with patch("app.services.ai.providers.get_settings") as mock:
+        mock.return_value.GEMINI_API_KEY = "platform-key"
+        mock.return_value.GEMINI_FLASH_MODEL = "gemini-3-flash-preview"
+        mock.return_value.GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
+
+        from app.services.ai.providers import get_provider
+        provider = get_provider(config=None, purpose="resume_tailoring")
+        assert provider.model_id == "gemini-3.1-pro-preview"
+
+
+def test_get_provider_platform_gemini_uses_user_model():
+    with patch("app.services.ai.providers.get_settings") as mock:
+        mock.return_value.GEMINI_API_KEY = "platform-key"
+
+        from app.services.ai.providers import get_provider
+        from app.services.ai.providers.gemini import GeminiProvider
+
+        config = MagicMock()
+        config.provider = "PLATFORM_GEMINI"
+        config.model_id = "gemini-2.5-pro"
+        config.api_host = None
+
+        provider = get_provider(config=config, purpose="anything")
+        assert isinstance(provider, GeminiProvider)
+        assert provider.model_id == "gemini-2.5-pro"
+        assert provider.api_key == "platform-key"
+
+
+def test_get_provider_openai():
+    from app.services.ai.providers import get_provider
+    from app.services.ai.providers.openai_provider import OpenAIProvider
+
+    config = MagicMock()
+    config.provider = "OPENAI"
+    config.model_id = "gpt-4o"
+    config.decrypted_api_key = "sk-user-key"
+    config.api_host = None
+
+    with patch("app.services.ai.providers.get_settings"):
+        provider = get_provider(config=config, purpose="anything")
+    assert isinstance(provider, OpenAIProvider)
+    assert provider.model_id == "gpt-4o"
