@@ -22,3 +22,7 @@ services:
 
 volumes:
   pgdata:
+
+networks:
+  dokploy-network:
+    external: true
