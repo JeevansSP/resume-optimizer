@@ -43,3 +43,23 @@ class BadRequestError(Exception):
 class ConflictError(Exception):
     """409 — e.g. concurrent chat request on the same session."""
     pass
+
+
+class ProviderError(Exception):
+    """Base exception for LLM provider failures."""
+    pass
+
+
+class ProviderAuthError(ProviderError):
+    """Invalid or expired API key."""
+    pass
+
+
+class ProviderRateLimitError(ProviderError):
+    """Provider rate limit or quota exceeded."""
+    pass
+
+
+class ProviderModelError(ProviderError):
+    """Model not found or unavailable."""
+    pass
