@@ -21,6 +21,10 @@ from app.exceptions import (
     NotFoundError,
     BadRequestError,
     ConflictError,
+    ProviderError,
+    ProviderAuthError,
+    ProviderRateLimitError,
+    ProviderModelError,
 )
 
 logger = logging.getLogger(__name__)
@@ -191,6 +195,22 @@ def create_app() -> FastAPI:
     async def conflict_error_handler(request: Request, exc: ConflictError):
         return JSONResponse(status_code=409, content={"detail": str(exc)})
 
+    @app.exception_handler(ProviderAuthError)
+    async def provider_auth_handler(request: Request, exc: ProviderAuthError):
+        return JSONResponse(status_code=401, content={"detail": str(exc)})
+
+    @app.exception_handler(ProviderRateLimitError)
+    async def provider_rate_limit_handler(request: Request, exc: ProviderRateLimitError):
+        return JSONResponse(status_code=429, content={"detail": str(exc)})
+
+    @app.exception_handler(ProviderModelError)
+    async def provider_model_handler(request: Request, exc: ProviderModelError):
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(ProviderError)
+    async def provider_error_handler(request: Request, exc: ProviderError):
+        return JSONResponse(status_code=502, content={"detail": str(exc)})
+
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError):
         return JSONResponse(status_code=400, content={"detail": str(exc)})
@@ -245,6 +265,7 @@ body{{background:#0a0f1e;color:#e2e8f0;font-family:'Inter',sans-serif;min-height
     from app.api.roasts import router as roasts_router
     from app.api.chat import router as chat_router
     from app.api.profile_chat import router as profile_chat_router
+    from app.api.ai_settings import router as ai_settings_router
 
     app.include_router(auth_router)
     app.include_router(profiles_router)
@@ -256,6 +277,7 @@ body{{background:#0a0f1e;color:#e2e8f0;font-family:'Inter',sans-serif;min-height
     app.include_router(roasts_router)
     app.include_router(chat_router)
     app.include_router(profile_chat_router)
+    app.include_router(ai_settings_router)
 
     # Landing page at /landing (clean URL)
     frontend_path = Path(__file__).parent.parent / "frontend"

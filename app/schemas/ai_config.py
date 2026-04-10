@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from app.models.ai_config import AIProvider
 
 
@@ -25,13 +25,11 @@ class AIConfigUpdate(BaseModel):
             raise ValueError("api_host is required for CUSTOM_OPENAI_COMPATIBLE provider")
         return v
 
-    @field_validator("api_key")
-    @classmethod
-    def validate_api_key(cls, v, info):
-        provider = info.data.get("provider")
-        if provider and provider != AIProvider.PLATFORM_GEMINI and not v:
+    @model_validator(mode="after")
+    def validate_api_key(self):
+        if self.provider and self.provider != AIProvider.PLATFORM_GEMINI and not self.api_key:
             raise ValueError("api_key is required for non-platform providers")
-        return v
+        return self
 
 
 class FetchModelsRequest(BaseModel):

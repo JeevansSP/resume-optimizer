@@ -4,7 +4,7 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from app.models.base import Base
-from app.models import user, profile, job, token_usage, tenant, roast, roast_view, credit  # noqa: F401  # imports ensure all models registered
+from app.models import user, profile, job, token_usage, tenant, roast, roast_view, credit, ai_config  # noqa: F401  # imports ensure all models registered
 from app.main import create_app
 from app.database.session import get_db
 from app.dependencies import get_current_user, get_super_admin
